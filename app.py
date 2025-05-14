@@ -1,14 +1,12 @@
 import streamlit as st
 import requests
 import sqlite3
-import time
-from streamlit.components.v1 import html
-from pygments import highlight
-from pygments.lexers import PythonLexer, get_lexer_by_name
-from pygments.formatters import HtmlFormatter
+import os
 
-#made changes here
-# --- Initialize DB ---
+# Load OpenRouter API key
+OPENROUTER_API_KEY = st.secrets["OPENROUTER_API_KEY"]
+
+# Initialize DB
 conn = sqlite3.connect("chat.db")
 cursor = conn.cursor()
 cursor.execute("""
@@ -30,14 +28,14 @@ cursor.execute("""
 """)
 conn.commit()
 
-# --- OpenRouter API Call ---
+# DeepSeek API Call
 def ask_deepseek(messages):
     headers = {
-        "Authorization": f"Bearer {st.secrets['OPENROUTER_API_KEY']}",
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json"
     }
     data = {
-        "model": "deepseek/deepseek-coder",
+        "model": "deepseek/deepseek-coder",  # Use DeepSeek Coder
         "messages": messages
     }
     response = requests.post(
@@ -47,53 +45,16 @@ def ask_deepseek(messages):
     )
     return response.json()["choices"][0]["message"]["content"]
 
-# --- Apply Syntax Highlighting to Code Blocks ---
-def highlight_code(text):
-    try:
-        lexer = get_lexer_by_name("python", stripall=True)
-        formatter = HtmlFormatter(style="monokai", nowrap=True)
-        highlighted = highlight(text, lexer, formatter)
-        return f'<div style="font-family: monospace; background: #272822; padding: 10px; border-radius: 5px;">{highlighted}</div>'
-    except:
-        return text  # Fallback if not code
+# Streamlit App
+st.set_page_config(page_title="DeepSeek Chat", layout="wide")
 
-# --- Streamlit App Config ---
-st.set_page_config(
-    page_title="DeepSeek Coder Chat",
-    page_icon="💻",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
-
-# --- Custom CSS for Better UI ---
-st.markdown("""
-    <style>
-    .stChatMessage {
-        padding: 12px;
-        border-radius: 8px;
-        margin-bottom: 8px;
-    }
-    .stChatMessage.user {
-        background-color: #2e4b8b;
-        color: white;
-    }
-    .stChatMessage.assistant {
-        background-color: #1f2937;
-        color: white;
-    }
-    .stTextInput input {
-        border-radius: 20px !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-# --- Sidebar (User Auth) ---
+# Sidebar for Login/Signup
 with st.sidebar:
-    st.title("🔐 Account")
+    st.title("🔐 Auth")
     if "user_id" not in st.session_state:
         st.session_state.user_id = None
     
-    # Login / Signup Tabs
+    # Login
     if st.session_state.user_id is None:
         tab1, tab2 = st.tabs(["Login", "Sign Up"])
         with tab1:
@@ -119,28 +80,24 @@ with st.sidebar:
                 except sqlite3.IntegrityError:
                     st.error("Username taken.")
     else:
-        st.success(f"👋 Welcome, User {st.session_state.user_id}")
+        st.success(f"Logged in as user {st.session_state.user_id}")
         if st.button("Logout"):
             st.session_state.user_id = None
             st.rerun()
 
-# --- Main Chat UI ---
+# Main Chat UI
 if st.session_state.user_id:
-    st.title("💬 **DeepSeek Coder Chat**")
-    st.caption("Ask me anything about coding!")
-
+    st.title("💬 DeepSeek Coder Chat")
+    
     # Load chat history
     cursor.execute("SELECT role, content FROM chats WHERE user_id = ? ORDER BY timestamp", (st.session_state.user_id,))
     chats = cursor.fetchall()
-
+    
     # Display messages
     for role, content in chats:
         with st.chat_message(role):
-            if "```" in content:  # Apply syntax highlighting for code blocks
-                st.markdown(highlight_code(content), unsafe_allow_html=True)
-            else:
-                st.markdown(content)
-
+            st.markdown(content)
+    
     # User input
     if prompt := st.chat_input("Ask DeepSeek Coder..."):
         # Save user message
@@ -155,8 +112,8 @@ if st.session_state.user_id:
         # Prepare messages for API (include history)
         messages = [{"role": role, "content": content} for role, content in chats] + [{"role": "user", "content": prompt}]
         
-        # Get AI response (with loading animation)
-        with st.spinner("DeepSeek is thinking..."):
+        # Get AI response
+        with st.spinner("Thinking..."):
             response = ask_deepseek(messages)
         
         # Save and display AI response
@@ -165,10 +122,7 @@ if st.session_state.user_id:
         conn.commit()
         
         with st.chat_message("assistant"):
-            if "```" in response:  # Syntax highlighting for code
-                st.markdown(highlight_code(response), unsafe_allow_html=True)
-            else:
-                st.markdown(response)
+            st.markdown(response)
 else:
     st.warning("Please log in to chat.")
 
