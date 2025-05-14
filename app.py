@@ -2,11 +2,9 @@ import streamlit as st
 import requests
 import sqlite3
 import os
-from dotenv import load_dotenv
 
 # Load OpenRouter API key
-load_dotenv()
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+OPENROUTER_API_KEY = st.secrets["OPENROUTER_API_KEY"]
 
 # Initialize DB
 conn = sqlite3.connect("chat.db")
